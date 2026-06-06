@@ -66,8 +66,9 @@ func TestRepositories(t *testing.T) {
 
 	setupDatabase(t, pool)
 
-	// Clean up
-	pool.Exec(context.Background(), `TRUNCATE packages, dead_letter_queue CASCADE`)
+	// Clean up only our test data
+	pool.Exec(context.Background(), `DELETE FROM packages WHERE idempotency_key IN ('11111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111112')`)
+	pool.Exec(context.Background(), `DELETE FROM dead_letter_queue`)
 
 	pkgRepo := db.NewPackageRepo(pool)
 	dlqRepo := db.NewDLQRepo(pool)
@@ -76,7 +77,7 @@ func TestRepositories(t *testing.T) {
 	var pkgID string
 	err = pool.QueryRow(context.Background(), `
 		INSERT INTO packages (payload, idempotency_key) 
-		VALUES ('{"test": 1}', '00000000-0000-0000-0000-000000000001') 
+		VALUES ('{"test": 1}', '11111111-1111-1111-1111-111111111111') 
 		RETURNING id::text
 	`).Scan(&pkgID)
 	if err != nil {
@@ -114,7 +115,7 @@ func TestRepositories(t *testing.T) {
 	var pkg2ID string
 	pool.QueryRow(context.Background(), `
 		INSERT INTO packages (payload, idempotency_key) 
-		VALUES ('{"test": 2}', '00000000-0000-0000-0000-000000000002') 
+		VALUES ('{"test": 2}', '11111111-1111-1111-1111-111111111112') 
 		RETURNING id::text
 	`).Scan(&pkg2ID)
 

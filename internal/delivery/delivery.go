@@ -22,7 +22,7 @@ func (e *DeliveryError) Error() string {
 type TargetConfig struct {
 	AdapterType string          `json:"adapter_type"` // e.g., "SAAS", "APIGEE"
 	EndpointURL string          `json:"endpoint_url"`
-	AuthConfig  json.RawMessage `json:"auth_config"`  // Specific to the adapter
+	AuthConfig  json.RawMessage `json:"auth_config"` // Specific to the adapter
 }
 
 // DeliverySender is the interface that all target adapters must implement.

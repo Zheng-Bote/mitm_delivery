@@ -11,11 +11,11 @@ import (
 )
 
 type mockPackageRepo struct {
-	deliveredID   string
-	failedID      string
-	failedMsg     string
-	nextRetryAt   time.Time
-	retryCount    int
+	deliveredID string
+	failedID    string
+	failedMsg   string
+	nextRetryAt time.Time
+	retryCount  int
 }
 
 func (m *mockPackageRepo) UpdateStatusDelivered(ctx context.Context, id string) error {

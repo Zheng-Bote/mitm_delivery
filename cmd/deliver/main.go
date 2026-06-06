@@ -54,11 +54,11 @@ func main() {
 	}
 
 	// 2. Database Connection from ENV
-	dbHost := getEnv("DB_HOST", getEnv("PGHOST", "localhost"))
-	dbPort := getEnv("DB_PORT", getEnv("PGPORT", "5432"))
-	dbUser := getEnv("DB_USER", getEnv("PGUSER", "postgres"))
-	dbPass := getEnv("DB_PASS", getEnv("PGPASSWORD", ""))
-	dbName := getEnv("DB_NAME", getEnv("PGDATABASE", "postgres"))
+	dbHost := getEnv("MITM_DB_HOST", getEnv("DB_HOST", getEnv("PGHOST", "localhost")))
+	dbPort := getEnv("MITM_DB_PORT", getEnv("DB_PORT", getEnv("PGPORT", "5432")))
+	dbUser := getEnv("MITM_DB_USER", getEnv("DB_USER", getEnv("PGUSER", "postgres")))
+	dbPass := getEnv("MITM_DB_PASSWORD", getEnv("DB_PASS", getEnv("PGPASSWORD", "")))
+	dbName := getEnv("MITM_DB_NAME", getEnv("DB_NAME", getEnv("PGDATABASE", "postgres")))
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", dbUser, dbPass, dbHost, dbPort, dbName)
 	pool, err := pgxpool.New(context.Background(), connString)

@@ -67,16 +67,17 @@ func TestE2EDeliveryBatchJob(t *testing.T) {
 
 	setupDatabase(t, pool)
 
-	// Clean up tables
-	pool.Exec(context.Background(), `TRUNCATE packages, dead_letter_queue CASCADE`)
+	// Clean up only our test data
+	pool.Exec(context.Background(), `DELETE FROM packages WHERE idempotency_key IN ('22222222-2222-2222-2222-222222222221', '22222222-2222-2222-2222-222222222222')`)
+	pool.Exec(context.Background(), `DELETE FROM dead_letter_queue`)
 
 	// Insert test data
 	var pkg1ID, pkg2ID string
 	err = pool.QueryRow(context.Background(), `
-		INSERT INTO packages (payload, idempotency_key) VALUES ('{"user": "Alice"}', '00000000-0000-0000-0000-000000000001') RETURNING id::text
+		INSERT INTO packages (payload, idempotency_key) VALUES ('{"user": "Alice"}', '22222222-2222-2222-2222-222222222221') RETURNING id::text
 	`).Scan(&pkg1ID)
 	err = pool.QueryRow(context.Background(), `
-		INSERT INTO packages (payload, idempotency_key) VALUES ('{"user": "Bob"}', '00000000-0000-0000-0000-000000000002') RETURNING id::text
+		INSERT INTO packages (payload, idempotency_key) VALUES ('{"user": "Bob"}', '22222222-2222-2222-2222-222222222222') RETURNING id::text
 	`).Scan(&pkg2ID)
 
 	if err != nil {
@@ -87,10 +88,10 @@ func TestE2EDeliveryBatchJob(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idem := r.Header.Get("Idempotency-Key")
 		t.Logf("Mock Server received request with Idempotency-Key: '%s'", idem)
-		if idem == "00000000-0000-0000-0000-000000000001" {
+		if idem == "22222222-2222-2222-2222-222222222221" {
 			// Success
 			w.WriteHeader(http.StatusOK)
-		} else if idem == "00000000-0000-0000-0000-000000000002" {
+		} else if idem == "22222222-2222-2222-2222-222222222222" {
 			// Fatal error to force DLQ immediately via MaxRetries 0, OR we just return 400
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
@@ -112,7 +113,7 @@ func TestE2EDeliveryBatchJob(t *testing.T) {
 	}
 	jobArgsBytes, _ := json.Marshal(jobArgs)
 
-	// Build and Run CLI 
+	// Build and Run CLI
 	buildCmd := exec.Command("go", "build", "-o", "../bin/mitm-deliver", "../cmd/deliver/main.go")
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		t.Fatalf("Failed to build CLI: %v\nOutput: %s", err, string(out))

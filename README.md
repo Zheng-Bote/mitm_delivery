@@ -32,11 +32,11 @@ The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_sc
 
 ```bash
 # 1. Provide Database connection via ENV
-export DB_HOST="192.168.0.31"
-export DB_PORT="5432"
-export DB_USER="mitm_user"
-export DB_PASS="secret"
-export DB_NAME="mitm"
+export MITM_DB_HOST="192.168.0.31"
+export MITM_DB_PORT="5432"
+export MITM_DB_USER="mitm_user"
+export MITM_DB_PASSWORD="secret"
+export MITM_DB_NAME="mitm"
 
 # 2. Define the Target and Job parameters
 ARGS_JSON='{
