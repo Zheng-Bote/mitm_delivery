@@ -13,7 +13,8 @@ The Delivery Layer is designed for extreme resilience and high concurrency:
 ## Supported Adapters
 
 1. **SaaS Adapter (`SAAS`)**: Direct HTTP interactions utilizing standard Bearer Tokens or API keys.
-2. **APIGEE Adapter (`APIGEE`)**: Enterprise gateway support featuring Mutual TLS (mTLS), JWT injection, and specific routing headers.
+2. **Cority SaaS Adapter (`CORITY_SAAS`)**: Specialized adapter implementing Cority's two-step OAuth flow and dynamic metadata injection.
+3. **APIGEE Adapter (`APIGEE`)**: Enterprise gateway support featuring Mutual TLS (mTLS), JWT injection, and specific routing headers.
 
 ## Building
 
@@ -25,48 +26,67 @@ go build -o bin/mitm-deliver ./cmd/deliver/main.go
 ## Usage
 
 The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_scheduler`. It expects:
-1. **Environment Variables** for PostgreSQL connections.
-2. **A single JSON Argument (`os.Args[1]`)** for job configuration and target endpoint routing.
+1. **Environment Variables** for PostgreSQL connections and `MASTER_KEY`.
+2. **A single JSON Argument (`os.Args[1]`)** specifying the Job constraints and the `Topic`.
 
 ### Example Execution
 
 ```bash
-# 1. Provide Database connection via ENV
+# 1. Provide Database connection and Key via ENV
 export MITM_DB_HOST="192.168.0.31"
 export MITM_DB_PORT="5432"
 export MITM_DB_USER="mitm_user"
 export MITM_DB_PASSWORD="secret"
 export MITM_DB_NAME="mitm"
+export MASTER_KEY="<base64_encryption_key>"
 
-# 2. Define the Target and Job parameters
+# 2. Define the Job parameters
 ARGS_JSON='{
+  "topic": "Employee",
   "workers": 5,
   "batch_size": 200,
-  "max_retries": 5,
-  "target_config": {
-    "adapter_type": "SAAS",
-    "endpoint_url": "https://api.saas-vendor.com/v1/ingest",
-    "auth_config": {
-      "api_key": "YOUR_API_KEY"
-    }
-  }
+  "max_retries": 5
 }'
 
 ./bin/mitm-deliver "$ARGS_JSON"
 ```
 
-### Advanced Config: APIGEE mTLS
-If you route via APIGEE, adjust the `target_config`:
+The Delivery job will automatically connect to the database, query the `delivery_targets` table for the target configuration matching the `Topic` ("Employee"), decrypt the `config_payload` using `MASTER_KEY`, and dynamically instantiate the correct adapter.
+
+### Config Payload Examples (Database / Admin UI)
+
+When configuring the Target via the Admin Frontend, the `Config Payload` JSON differs per adapter.
+
+#### Cority SaaS (Adapter: CORITY_SAAS)
 ```json
-"target_config": {
-  "adapter_type": "APIGEE",
-  "endpoint_url": "https://gateway.internal.corp/mitm",
-  "auth_config": {
-    "client_cert_path": "/opt/certs/client.crt",
-    "client_key_path": "/opt/certs/client.key",
-    "jwt_token": "...",
-    "routing_key": "vendor-x"
+{
+  "login_user": "Cority_Integration",
+  "login_pass": "Cority123$",
+  "auth_refresh_path": "/api/refreshtoken",
+  "auth_token_path": "/api/token/",
+  "import_path": "/api/employeeimport",
+  "upload_options": {
+     "import_mode": "upsert",
+     "batch_size": 500,
+     "updateExistingRecords": true,
+     "insertBaseTables": true,
+     "forceLookupTableUpdate": true,
+     "disableSegUpdate": false,
+     "autoCreatePortalUser": true,
+     "mergeRecordsWithMatchingSsn": false,
+     "dateFormat": "dd.mm.yyyy"
   }
+}
+```
+
+#### APIGEE mTLS (Adapter: APIGEE)
+If you route via APIGEE, the payload might look like:
+```json
+{
+  "client_cert_path": "/opt/certs/client.crt",
+  "client_key_path": "/opt/certs/client.key",
+  "jwt_token": "...",
+  "routing_key": "vendor-x"
 }
 ```
 

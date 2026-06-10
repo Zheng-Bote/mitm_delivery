@@ -16,13 +16,14 @@ import (
 	"mitm_delivery/internal/db"
 	"mitm_delivery/internal/delivery"
 	"mitm_delivery/internal/engine"
+	"mitm_delivery/internal/ipc"
 )
 
 type JobArgs struct {
-	Workers      int                   `json:"workers"`
-	BatchSize    int                   `json:"batch_size"`
-	MaxRetries   int                   `json:"max_retries"`
-	TargetConfig delivery.TargetConfig `json:"target_config"`
+	Topic      string `json:"topic"`
+	Workers    int    `json:"workers"`
+	BatchSize  int    `json:"batch_size"`
+	MaxRetries int    `json:"max_retries"`
 }
 
 func getEnv(key, fallback string) string {
@@ -72,15 +73,47 @@ func main() {
 	dlqRepo := db.NewDLQRepo(pool)
 	retryEngine := engine.NewRetryEngine(pkgRepo, dlqRepo, jobArgs.MaxRetries)
 
+	targetRepo := db.NewTargetRepo(pool)
+
+	runIDStr := getEnv("RUN_ID", "0")
+	var runID int
+	fmt.Sscanf(runIDStr, "%d", &runID)
+	socketPath := getEnv("SCHEDULER_SOCKET_PATH", "")
+
+	var ipcClient *ipc.IPCClient
+	if runID > 0 && socketPath != "" {
+		ipcClient = &ipc.IPCClient{
+			SocketPath: socketPath,
+			RunID:      runID,
+			Component:  "mitm_delivery",
+		}
+	}
+	
+	// Helper for audit logging
+	logAudit := func(msg string) {
+		log.Printf("AUDIT: %s", msg)
+		if ipcClient != nil {
+			ipcClient.SendAudit(msg)
+		}
+	}
+
+	// Fetch target config dynamically
+	targetConfig, err := targetRepo.GetDeliveryTarget(context.Background(), jobArgs.Topic)
+	if err != nil {
+		log.Fatalf("Failed to fetch delivery target config for topic '%s': %v", jobArgs.Topic, err)
+	}
+
 	// 4. Instantiate Delivery Sender
 	var sender delivery.DeliverySender
-	switch jobArgs.TargetConfig.AdapterType {
+	switch targetConfig.AdapterType {
 	case "SAAS":
 		sender = delivery.NewSaaSAdapter(nil)
+	case "CORITY_SAAS":
+		sender = delivery.NewCorityAdapter(nil)
 	case "APIGEE":
 		sender = delivery.NewApigeeAdapter(nil)
 	default:
-		log.Fatalf("Unsupported adapter_type: %s", jobArgs.TargetConfig.AdapterType)
+		log.Fatalf("Unsupported adapter_type: %s", targetConfig.AdapterType)
 	}
 
 	// Context for graceful shutdown
@@ -96,6 +129,9 @@ func main() {
 	}()
 
 	log.Printf("Starting Delivery Batch Job (Workers: %d, Batch Size: %d)...", jobArgs.Workers, jobArgs.BatchSize)
+	if ipcClient != nil {
+		ipcClient.SendEvent("processing", fmt.Sprintf("Starting Delivery Batch Job (Workers: %d, Batch Size: %d)...", jobArgs.Workers, jobArgs.BatchSize), 0)
+	}
 
 	// 5. Worker Pool Setup
 	jobs := make(chan db.Package, jobArgs.BatchSize)
@@ -104,19 +140,27 @@ func main() {
 	// Start workers
 	for i := 0; i < jobArgs.Workers; i++ {
 		wg.Add(1)
-		go worker(ctx, &wg, jobs, retryEngine, sender, jobArgs.TargetConfig)
+		go worker(ctx, &wg, jobs, retryEngine, sender, *targetConfig, logAudit)
 	}
 
 	totalProcessed := 0
 
-	// 6. Dispatcher Loop
+	// 6. Packager: Create delivery packages from target_fragments
+	packagedCount, err := pkgRepo.PackageTargetFragments(ctx, jobArgs.Topic, jobArgs.BatchSize*10)
+	if err != nil {
+		log.Printf("Error packaging target fragments: %v", err)
+	} else if packagedCount > 0 {
+		log.Printf("Packaged %d target fragments into new delivery packages.", packagedCount)
+	}
+
+	// 7. Dispatcher Loop
 dispatcherLoop:
 	for {
 		if ctx.Err() != nil {
 			break dispatcherLoop
 		}
 
-		packages, err := pkgRepo.ClaimPendingPackages(ctx, jobArgs.BatchSize)
+		packages, err := pkgRepo.ClaimPendingPackages(ctx, jobArgs.Topic, jobArgs.BatchSize)
 		if err != nil {
 			log.Printf("Error claiming packages: %v", err)
 			time.Sleep(2 * time.Second)
@@ -142,13 +186,20 @@ dispatcherLoop:
 	close(jobs)
 	wg.Wait()
 	log.Printf("Delivery Batch Job finished successfully. Processed %d records.", totalProcessed)
+	if ipcClient != nil {
+		ipcClient.SendEvent("success", fmt.Sprintf("Delivery Batch Job finished successfully. Processed %d records.", totalProcessed), 100)
+	}
 }
 
-func worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan db.Package, engine *engine.RetryEngine, sender delivery.DeliverySender, config delivery.TargetConfig) {
+func worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan db.Package, engine *engine.RetryEngine, sender delivery.DeliverySender, config delivery.TargetConfig, logAudit func(string)) {
 	defer wg.Done()
 	for pkg := range jobs {
-		if err := engine.ProcessPackage(ctx, pkg, sender, config); err != nil {
+		err := engine.ProcessPackage(ctx, pkg, sender, config)
+		if err != nil {
 			log.Printf("Failed to process package %s: %v", pkg.ID, err)
+			logAudit(fmt.Sprintf("Package %s failed: %v", pkg.ID, err))
+		} else {
+			logAudit(fmt.Sprintf("Package %s delivered successfully (Code: 200/OK)", pkg.ID))
 		}
 	}
 }
