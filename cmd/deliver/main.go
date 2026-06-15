@@ -19,6 +19,12 @@ import (
 	"mitm_delivery/internal/ipc"
 )
 
+var (
+	appName        = "Delivery Engine"
+	appDescription = "Delivers packaged data to target systems"
+	version        = "1.0.0"
+)
+
 type JobArgs struct {
 	Topic      string `json:"topic"`
 	Workers    int    `json:"workers"`
@@ -87,8 +93,10 @@ func main() {
 			RunID:      runID,
 			Component:  "mitm_delivery",
 		}
+		ipcClient.SendEvent("started", fmt.Sprintf("%s (%s) started", appName, version), 0)
+		ipcClient.SendAudit(fmt.Sprintf("%s (%s) started", appName, version))
 	}
-	
+
 	// Helper for audit logging
 	logAudit := func(msg string) {
 		log.Printf("AUDIT: %s", msg)
@@ -109,7 +117,7 @@ func main() {
 	case "SAAS":
 		sender = delivery.NewSaaSAdapter(nil)
 	case "CORITY_SAAS":
-		sender = delivery.NewCorityAdapter(nil)
+		sender = delivery.NewCorityAdapter(nil, logAudit)
 	case "APIGEE":
 		sender = delivery.NewApigeeAdapter(nil)
 	default:

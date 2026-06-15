@@ -5,6 +5,12 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.0] - 2026-06-15
+
+### Added
+- **Cority SaaS Audit Logging**: The Cority SaaS adapter now captures the complete raw response from the provider and logs it directly into the `job_audit_log` via IPC.
+- **Centralized App Info**: Added `appName` and `version` globally. The component now broadcasts its name and version via IPC when starting.
+
 ## [v0.4.0] - 2026-06-10
 
 ### Added

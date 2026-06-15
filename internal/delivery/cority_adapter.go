@@ -32,14 +32,15 @@ type CorityAuthConfig struct {
 }
 
 type CorityAdapter struct {
-	client *http.Client
+	client   *http.Client
+	logAudit func(string)
 }
 
-func NewCorityAdapter(client *http.Client) *CorityAdapter {
+func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &CorityAdapter{client: client}
+	return &CorityAdapter{client: client, logAudit: logAudit}
 }
 
 func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempotencyKey string, payload []byte) error {
@@ -161,11 +162,16 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	}
 	defer resp3.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp3.Body)
+	
+	if a.logAudit != nil && len(bodyBytes) > 0 {
+		a.logAudit(string(bodyBytes))
+	}
+
 	if resp3.StatusCode >= 200 && resp3.StatusCode < 300 {
 		return nil
 	}
 
-	bodyBytes, _ := io.ReadAll(resp3.Body)
 	isTransient := false
 	if resp3.StatusCode == http.StatusTooManyRequests || (resp3.StatusCode >= 500 && resp3.StatusCode <= 599) {
 		isTransient = true
