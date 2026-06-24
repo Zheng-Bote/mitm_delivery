@@ -50,10 +50,36 @@ func (r *TargetRepo) GetDeliveryTarget(ctx context.Context, topic string) (*deli
 		decrypted = []byte(`{"client_id": "mock", "client_secret": "mock", "token_url": "mock", "import_path": "mock"}`)
 	}
 
+	// Fetch encrypted fields for the topic (via source -> rule -> target_field relationship)
+	fieldsQuery := `
+		SELECT DISTINCT mtf.field_name 
+		FROM mapping_target_field mtf
+		JOIN mapping_rule mr ON mtf.id = mr.target_field_id
+		JOIN mapping_source ms ON mr.source_id = ms.id
+		WHERE LOWER(ms.topic) = LOWER($1) AND mtf.encrypted = true
+	`
+	rows, err := r.Pool.Query(ctx, fieldsQuery, topic)
+	var encryptedFields []string
+	if err == nil {
+		for rows.Next() {
+			var fieldName string
+			if err := rows.Scan(&fieldName); err == nil {
+				encryptedFields = append(encryptedFields, fieldName)
+			}
+		}
+		rows.Close()
+	} else {
+		// Even if err is not nil, we log it for debugging
+		fmt.Printf("Query for encrypted fields failed: %v\n", err)
+	}
+
 	cfg := &delivery.TargetConfig{
-		AdapterType: adapterType,
-		EndpointURL: endpointURL,
-		AuthConfig:  decrypted,
+		AdapterType:     adapterType,
+		EndpointURL:     endpointURL,
+		AuthConfig:      decrypted,
+		WrappedKey:      wrappedKey,
+		KEK:             kek,
+		EncryptedFields: encryptedFields,
 	}
 
 	return cfg, nil

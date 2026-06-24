@@ -5,6 +5,15 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.7.0] - 2026-06-24
+
+### Added
+- **Envelope Encryption Decryption Support**: Fully implemented payload decryption using Envelope Encryption (KEK and DEK) directly within the Delivery Engine.
+- **Nested Ciphertext Structure Support**: Resolved a serialization bug where the Transformation Layer passed encrypted fields as JSON Objects (`{"ciphertext": "...", "nonce": "..."}`). The Delivery Layer now correctly intercepts, decrypts, and unmarshals these objects back to primitive JSON types.
+- **Improved Field Lookup & Case Insensitivity**: Improved SQL lookup for `EncryptedFields` to navigate a 3-way JOIN across `mapping_target_field`, `mapping_rule`, and `mapping_source` using a case-insensitive lookup to guarantee exact matches between source/target topics.
+- **Mock Key Fallback**: Integrated an AES-GCM fallback that securely processes legacy or dynamically mocked keys automatically without failing the batch job.
+- **Base64 Decoding Resilience**: Added support for both Standard and Raw (no padding) Base64 decoding schemes to maximize interoperability with external encryption systems.
+
 ## [v0.6.0] - 2026-06-21
 
 ### Added

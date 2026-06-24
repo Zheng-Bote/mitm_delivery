@@ -83,6 +83,21 @@ When configuring the Target via the Admin Frontend, the `Config Payload` JSON di
 }
 ```
 
+**Note:** The adapter uses this configuration to assemble the final payload for the target API. Specifically, the data is uploaded in the following format:
+
+```json
+{
+  "options": {
+    "import_mode": "upsert",
+    "batch_size": 500
+    // ... other options
+  },
+  "records": [
+    // Array of transformed data records
+  ]
+}
+```
+
 #### APIGEE mTLS (Adapter: APIGEE)
 
 If you route via APIGEE, the payload might look like:

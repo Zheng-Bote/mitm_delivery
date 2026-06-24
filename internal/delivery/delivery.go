@@ -20,9 +20,12 @@ func (e *DeliveryError) Error() string {
 
 // TargetConfig defines the dynamic configuration passed to the orchestrator.
 type TargetConfig struct {
-	AdapterType string          `json:"adapter_type"` // e.g., "SAAS", "APIGEE"
-	EndpointURL string          `json:"endpoint_url"`
-	AuthConfig  json.RawMessage `json:"auth_config"` // Specific to the adapter
+	AdapterType     string          `json:"adapter_type"` // e.g., "SAAS", "APIGEE"
+	EndpointURL     string          `json:"endpoint_url"`
+	AuthConfig      json.RawMessage `json:"auth_config"` // Specific to the adapter
+	WrappedKey      []byte          `json:"-"`
+	KEK             []byte          `json:"-"`
+	EncryptedFields []string        `json:"-"`
 }
 
 // DeliverySender is the interface that all target adapters must implement.
