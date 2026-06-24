@@ -108,39 +108,38 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 
 	// 3. Send Payload Data
 	var rawData []interface{}
-	if err := json.Unmarshal(payload, &rawData); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	if err := decoder.Decode(&rawData); err != nil {
 		return &DeliveryError{IsTransient: false, ErrorMessage: "payload is not valid JSON array", ErrorCode: "INVALID_PAYLOAD"}
 	}
 	
-	// Convert nulls to empty strings recursively
-	var replaceNulls func(interface{}) interface{}
-	replaceNulls = func(data interface{}) interface{} {
+	// Convert all values to strings and nulls to empty strings recursively
+	var convertToStrings func(interface{}) interface{}
+	convertToStrings = func(data interface{}) interface{} {
+		if data == nil {
+			return ""
+		}
 		switch v := data.(type) {
 		case map[string]interface{}:
 			for key, val := range v {
-				if val == nil {
-					v[key] = ""
-				} else {
-					v[key] = replaceNulls(val)
-				}
+				v[key] = convertToStrings(val)
 			}
 			return v
 		case []interface{}:
 			for i, val := range v {
-				if val == nil {
-					v[i] = ""
-				} else {
-					v[i] = replaceNulls(val)
-				}
+				v[i] = convertToStrings(val)
 			}
 			return v
+		case string:
+			return v
 		default:
-			return data
+			return fmt.Sprintf("%v", v)
 		}
 	}
 	
 	for i, item := range rawData {
-		rawData[i] = replaceNulls(item)
+		rawData[i] = convertToStrings(item)
 	}
 	
 	finalBody := map[string]interface{}{
@@ -164,8 +163,8 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 
 	bodyBytes, _ := io.ReadAll(resp3.Body)
 	
-	if a.logAudit != nil && len(bodyBytes) > 0 {
-		a.logAudit(string(bodyBytes))
+	if a.logAudit != nil {
+		a.logAudit(fmt.Sprintf("CORITY_SAAS Upload | Target: %s | Idempotency-Key: %s | Return Code: %d | Response: %s", importReqURL, idempotencyKey, resp3.StatusCode, string(bodyBytes)))
 	}
 
 	if resp3.StatusCode >= 200 && resp3.StatusCode < 300 {

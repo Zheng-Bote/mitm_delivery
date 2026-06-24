@@ -5,6 +5,7 @@ This directory contains the Go implementation of the MitM Delivery Layer. It ser
 ## Overview
 
 The Delivery Layer is designed for extreme resilience and high concurrency:
+
 - **Idempotency:** Every delivery attempt is bound to an `Idempotency-Key` (UUID) to prevent duplicated records if network timeouts occur.
 - **Retry Engine:** Implements Exponential Backoff for transient errors (e.g., `HTTP 429 Too Many Requests` or `HTTP 503 Service Unavailable`).
 - **Dead Letter Queue (DLQ):** Permanently failing deliveries (e.g., `HTTP 400 Bad Request` or exhausting retry limits) are safely moved into the `dead_letter_queue` table to prevent queue blocking.
@@ -19,6 +20,7 @@ The Delivery Layer is designed for extreme resilience and high concurrency:
 ## Building
 
 To build the executable, run:
+
 ```bash
 go build -o bin/mitm-deliver ./cmd/deliver/main.go
 ```
@@ -26,6 +28,7 @@ go build -o bin/mitm-deliver ./cmd/deliver/main.go
 ## Usage
 
 The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_scheduler`. It expects:
+
 1. **Environment Variables** for PostgreSQL connections and `MASTER_KEY`.
 2. **A single JSON Argument (`os.Args[1]`)** specifying the Job constraints and the `Topic`.
 
@@ -33,7 +36,7 @@ The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_sc
 
 ```bash
 # 1. Provide Database connection and Key via ENV
-export MITM_DB_HOST="192.168.0.31"
+export MITM_DB_HOST="192.168.7.31"
 export MITM_DB_PORT="5432"
 export MITM_DB_USER="mitm_user"
 export MITM_DB_PASSWORD="secret"
@@ -58,29 +61,32 @@ The Delivery job will automatically connect to the database, query the `delivery
 When configuring the Target via the Admin Frontend, the `Config Payload` JSON differs per adapter.
 
 #### Cority SaaS (Adapter: CORITY_SAAS)
+
 ```json
 {
-  "login_user": "Cority_Integration",
-  "login_pass": "Cority123$",
+  "login_user": "Cority_User",
+  "login_pass": "CorityMy$ecret",
   "auth_refresh_path": "/api/refreshtoken",
   "auth_token_path": "/api/token/",
   "import_path": "/api/employeeimport",
   "upload_options": {
-     "import_mode": "upsert",
-     "batch_size": 500,
-     "updateExistingRecords": true,
-     "insertBaseTables": true,
-     "forceLookupTableUpdate": true,
-     "disableSegUpdate": false,
-     "autoCreatePortalUser": true,
-     "mergeRecordsWithMatchingSsn": false,
-     "dateFormat": "dd.mm.yyyy"
+    "import_mode": "upsert",
+    "batch_size": 500,
+    "updateExistingRecords": true,
+    "insertBaseTables": true,
+    "forceLookupTableUpdate": true,
+    "disableSegUpdate": false,
+    "autoCreatePortalUser": true,
+    "mergeRecordsWithMatchingSsn": false,
+    "dateFormat": "dd.mm.yyyy"
   }
 }
 ```
 
 #### APIGEE mTLS (Adapter: APIGEE)
+
 If you route via APIGEE, the payload might look like:
+
 ```json
 {
   "client_cert_path": "/opt/certs/client.crt",
@@ -91,8 +97,10 @@ If you route via APIGEE, the payload might look like:
 ```
 
 ## Database Interaction
+
 The job interacts strictly with the tables predefined in `./migrations`:
+
 - `packages`: Pulls pending/retryable records.
-- `dead_letter_queue`: Safely unloads fatal records. 
+- `dead_letter_queue`: Safely unloads fatal records.
 
 Concurrency is handled natively in Postgres using `FOR UPDATE SKIP LOCKED`.
