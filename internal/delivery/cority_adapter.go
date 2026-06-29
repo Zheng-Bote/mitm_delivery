@@ -23,8 +23,6 @@ type CorityAuthConfig struct {
 	AuthTokenPath   string `json:"auth_token_path"`
 	ImportPath      string `json:"import_path"`
 	UploadOptions   struct {
-		ImportMode                  string `json:"import_mode"`
-		BatchSize                   int    `json:"batch_size"`
 		UpdateExistingRecords       bool   `json:"updateExistingRecords"`
 		InsertBaseTables            bool   `json:"insertBaseTables"`
 		ForceLookupTableUpdate      bool   `json:"forceLookupTableUpdate"`
@@ -64,23 +62,23 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	refreshBody := fmt.Sprintf(`{"user":{"LoginName":"%s","Loginpassword":"%s"}}`, cfg.LoginUser, cfg.LoginPass)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, refreshReqURL, strings.NewReader(refreshBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed refresh request: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("refresh token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
 	}
-	
+
 	var refreshResp map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&refreshResp); err != nil {
 		return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse refresh token response", ErrorCode: "AUTH_FAIL"}
 	}
-	
+
 	var refreshToken string
 	if val, ok := refreshResp["Token"].(string); ok && val != "" {
 		refreshToken = val
@@ -96,23 +94,23 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	tokenReqURL := baseURL + cfg.AuthTokenPath
 	req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenReqURL, nil)
 	req2.Header.Set("Authorization", "Bearer "+refreshToken)
-	
+
 	resp2, err := a.client.Do(req2)
 	if err != nil {
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed token request: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}
 	defer resp2.Body.Close()
-	
+
 	if resp2.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp2.Body)
 		return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("access token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
 	}
-	
+
 	var tokenResp map[string]interface{}
 	if err := json.NewDecoder(resp2.Body).Decode(&tokenResp); err != nil {
 		return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse access token response", ErrorCode: "AUTH_FAIL"}
 	}
-	
+
 	var accessToken string
 	if val, ok := tokenResp["AccessToken"].(string); ok && val != "" {
 		accessToken = val
@@ -133,7 +131,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	if err := decoder.Decode(&rawData); err != nil {
 		return &DeliveryError{IsTransient: false, ErrorMessage: "payload is not valid JSON array", ErrorCode: "INVALID_PAYLOAD"}
 	}
-	
+
 	// Decrypt encrypted fields
 	if len(config.EncryptedFields) > 0 {
 		if a.logAudit != nil && len(rawData) > 0 {
@@ -145,14 +143,14 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 				a.logAudit(fmt.Sprintf("DEBUG: EncryptedFields=%v | Payload Keys[0]=%v", config.EncryptedFields, keys))
 			}
 		}
-		
+
 		for _, item := range rawData {
 			if m, ok := item.(map[string]interface{}); ok {
 				for _, field := range config.EncryptedFields {
 					var targetKey string
 					var val interface{}
 					var exists bool
-					
+
 					if v, ok := m[field]; ok {
 						val = v
 						targetKey = field
@@ -177,7 +175,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 							// Handle map format: {"ciphertext": "...", "nonce": "..."}
 							cipherStr, _ := mapVal["ciphertext"].(string)
 							nonceStr, _ := mapVal["nonce"].(string)
-							
+
 							if cipherStr != "" && nonceStr != "" {
 								nBytes, err1 := base64.StdEncoding.DecodeString(nonceStr)
 								cBytes, err2 := base64.StdEncoding.DecodeString(cipherStr)
@@ -197,7 +195,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 							if err != nil {
 								decoded, err = base64.RawStdEncoding.DecodeString(strVal)
 							}
-							
+
 							if err == nil && len(decoded) > 12 {
 								nonceBytes = decoded[:12]
 								ciphertextBytes = decoded[12:]
@@ -215,7 +213,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 
 						if hasValidData {
 							decrypted, err := crypto.EnvelopeDecrypt(config.KEK, config.WrappedKey, nonceBytes, ciphertextBytes)
-							
+
 							// Fallback: If EnvelopeDecrypt fails, the Transformation layer might have used its mock target key directly
 							if err != nil {
 								mockKey := []byte("0123456789abcdef0123456789abcdef")
@@ -274,18 +272,18 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 			return fmt.Sprintf("%v", v)
 		}
 	}
-	
+
 	for i, item := range rawData {
 		rawData[i] = convertToStrings(item)
 	}
-	
+
 	finalBody := map[string]interface{}{
 		"options": cfg.UploadOptions,
 		"records": rawData,
 	}
-	
+
 	finalBytes, _ := json.Marshal(finalBody)
-	
+
 	importReqURL := baseURL + cfg.ImportPath
 	req3, _ := http.NewRequestWithContext(ctx, http.MethodPost, importReqURL, bytes.NewReader(finalBytes))
 	req3.Header.Set("Content-Type", "application/json")
@@ -299,7 +297,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	defer resp3.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp3.Body)
-	
+
 	if a.logAudit != nil {
 		a.logAudit(fmt.Sprintf("CORITY_SAAS Upload | Target: %s | Idempotency-Key: %s | Return Code: %d | Response: %s", importReqURL, idempotencyKey, resp3.StatusCode, string(bodyBytes)))
 	}
