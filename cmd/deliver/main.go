@@ -60,12 +60,41 @@ func main() {
 		jobArgs.MaxRetries = 5
 	}
 
-	// 2. Database Connection from ENV
-	dbHost := getEnv("MITM_DB_HOST", getEnv("DB_HOST", getEnv("PGHOST", "localhost")))
-	dbPort := getEnv("MITM_DB_PORT", getEnv("DB_PORT", getEnv("PGPORT", "5432")))
-	dbUser := getEnv("MITM_DB_USER", getEnv("DB_USER", getEnv("PGUSER", "postgres")))
-	dbPass := getEnv("MITM_DB_PASSWORD", getEnv("DB_PASS", getEnv("PGPASSWORD", "")))
-	dbName := getEnv("MITM_DB_NAME", getEnv("DB_NAME", getEnv("PGDATABASE", "postgres")))
+	// 2. Database Connection Setup
+	configSource := "Environment Variables"
+	dbHost := ""
+	dbPort := ""
+	dbUser := ""
+	dbPass := ""
+	dbName := ""
+
+	jsonConfig := os.Getenv("MITM_DB_CONFIG_JSON")
+	if jsonConfig != "" {
+		var fullCfg struct {
+			DB struct {
+				Host     string `json:"host"`
+				Port     int    `json:"port"`
+				User     string `json:"user"`
+				Password string `json:"password"`
+				Database string `json:"database"`
+			} `json:"db"`
+		}
+		if err := json.Unmarshal([]byte(jsonConfig), &fullCfg); err != nil {
+			log.Fatalf("Failed to parse MitM JSON configuration: %v", err)
+		}
+		dbHost = fullCfg.DB.Host
+		dbPort = fmt.Sprintf("%d", fullCfg.DB.Port)
+		dbUser = fullCfg.DB.User
+		dbPass = fullCfg.DB.Password
+		dbName = fullCfg.DB.Database
+		configSource = "JSON Config (MITM_DB_CONFIG_JSON)"
+	} else {
+		dbHost = getEnv("MITM_DB_HOST", getEnv("DB_HOST", getEnv("PGHOST", "localhost")))
+		dbPort = getEnv("MITM_DB_PORT", getEnv("DB_PORT", getEnv("PGPORT", "5432")))
+		dbUser = getEnv("MITM_DB_USER", getEnv("DB_USER", getEnv("PGUSER", "postgres")))
+		dbPass = getEnv("MITM_DB_PASSWORD", getEnv("DB_PASS", getEnv("PGPASSWORD", "")))
+		dbName = getEnv("MITM_DB_NAME", getEnv("DB_NAME", getEnv("PGDATABASE", "postgres")))
+	}
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", dbUser, dbPass, dbHost, dbPort, dbName)
 	pool, err := pgxpool.New(context.Background(), connString)
@@ -95,6 +124,7 @@ func main() {
 		}
 		ipcClient.SendEvent("started", fmt.Sprintf("%s (%s) started", appName, version), 0)
 		ipcClient.SendAudit(fmt.Sprintf("%s (%s) started", appName, version))
+		ipcClient.SendAudit(fmt.Sprintf("Loaded database configuration from %s", configSource))
 	}
 
 	// Helper for audit logging

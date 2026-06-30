@@ -35,12 +35,17 @@ The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_sc
 ### Example Execution
 
 ```bash
-# 1. Provide Database connection and Key via ENV
+# 1. Provide Database connection via JSON (Preferred)
+export MITM_DB_CONFIG_JSON='{"db":{"host":"192.168.7.31","port":5432,"user":"mitm_user","password":"...","database":"mitm"}}'
+
+# Or via Direct Environment Variables (Fallback)
 export MITM_DB_HOST="192.168.7.31"
 export MITM_DB_PORT="5432"
 export MITM_DB_USER="mitm_user"
 export MITM_DB_PASSWORD="secret"
 export MITM_DB_NAME="mitm"
+
+# Provide the Master Key
 export MASTER_KEY="<base64_encryption_key>"
 
 # 2. Define the Job parameters

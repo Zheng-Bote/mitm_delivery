@@ -5,6 +5,13 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.8.0] - 2026-06-30
+
+### Changed
+- **Config Restructuring**: Updated database connection setup to read and parse the JSON configuration (`MITM_DB_CONFIG_JSON`) provided by the scheduler, matching the nested `"db"` object format.
+- **Database Connection**: The delivery layer now prioritizes the JSON configuration over the direct environment variables (`MITM_DB_HOST`, `DB_HOST`, etc.). Direct variables are kept strictly as a fallback.
+- **Audit Logging**: Added IPC audit logging during startup to actively record whether the database configuration was loaded from `JSON Config (MITM_DB_CONFIG_JSON)` or `Environment Variables`.
+
 ## [v0.7.0] - 2026-06-24
 
 ### Added
