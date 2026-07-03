@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"mitm_delivery/internal/crypto"
@@ -36,6 +38,7 @@ type CorityAuthConfig struct {
 type CorityAdapter struct {
 	client   *http.Client
 	logAudit func(string)
+	mu       sync.Mutex
 }
 
 func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter {
@@ -46,6 +49,8 @@ func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter
 }
 
 func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempotencyKey string, payload []byte) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	var cfg CorityAuthConfig
 	if err := json.Unmarshal(config.AuthConfig, &cfg); err != nil {
 		return &DeliveryError{
@@ -303,6 +308,29 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	}
 
 	if resp3.StatusCode >= 200 && resp3.StatusCode < 300 {
+		if a.logAudit != nil {
+			bodyStr := string(bodyBytes)
+			var stats []string
+
+			patterns := []string{
+				`Records Added\s*:\s*\d+`,
+				`Records Updated\s*:\s*\d+`,
+				`Records Skipped\s*:\s*\d+`,
+				`Errors\s*:\s*\d+`,
+			}
+
+			for _, p := range patterns {
+				if match := regexp.MustCompile(p).FindString(bodyStr); match != "" {
+					// Format nicely by normalizing spaces around the colon
+					match = regexp.MustCompile(`\s+:\s+`).ReplaceAllString(match, ": ")
+					stats = append(stats, match)
+				}
+			}
+
+			if len(stats) > 0 {
+				a.logAudit(fmt.Sprintf("Cority Import Statistics: %s", strings.Join(stats, " | ")))
+			}
+		}
 		return nil
 	}
 

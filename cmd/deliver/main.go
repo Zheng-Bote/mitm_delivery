@@ -148,6 +148,10 @@ func main() {
 		sender = delivery.NewSaaSAdapter(nil)
 	case "CORITY_SAAS":
 		sender = delivery.NewCorityAdapter(nil, logAudit)
+		if jobArgs.Workers > 1 {
+			log.Printf("Forcing workers to 1 for CORITY_SAAS to prevent concurrent import errors.")
+			jobArgs.Workers = 1
+		}
 	case "APIGEE":
 		sender = delivery.NewApigeeAdapter(nil)
 	default:

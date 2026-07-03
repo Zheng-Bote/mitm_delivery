@@ -14,7 +14,7 @@ The Delivery Layer is designed for extreme resilience and high concurrency:
 ## Supported Adapters
 
 1. **SaaS Adapter (`SAAS`)**: Direct HTTP interactions utilizing standard Bearer Tokens or API keys.
-2. **Cority SaaS Adapter (`CORITY_SAAS`)**: Specialized adapter implementing Cority's two-step OAuth flow and dynamic metadata injection.
+2. **Cority SaaS Adapter (`CORITY_SAAS`)**: Specialized adapter implementing Cority's two-step OAuth flow and dynamic metadata injection. It automatically restricts concurrency to a single worker to comply with Cority's API limits.
 3. **APIGEE Adapter (`APIGEE`)**: Enterprise gateway support featuring Mutual TLS (mTLS), JWT injection, and specific routing headers.
 
 ## Building

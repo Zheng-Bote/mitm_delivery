@@ -85,7 +85,7 @@ func TestRepositories(t *testing.T) {
 	}
 
 	// 2. Claim pending
-	claimed, err := pkgRepo.ClaimPendingPackages(context.Background(), 10)
+	claimed, err := pkgRepo.ClaimPendingPackages(context.Background(), "test-topic", 10)
 	if err != nil {
 		t.Fatalf("ClaimPendingPackages failed: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRepositories(t *testing.T) {
 		t.Fatalf("UpdateStatusFailed failed: %v", err)
 	}
 
-	claimedRetry, err := pkgRepo.ClaimPendingPackages(context.Background(), 10)
+	claimedRetry, err := pkgRepo.ClaimPendingPackages(context.Background(), "test-topic", 10)
 	if err != nil {
 		t.Fatalf("ClaimPendingPackages failed on retry: %v", err)
 	}

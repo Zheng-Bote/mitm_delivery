@@ -5,6 +5,11 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.9.0] - 2026-07-03
+
+### Fixed
+- **Cority SaaS Concurrency Limits**: Resolved an error from the Cority SaaS provider (`only one import can be run at a time`). The engine now forces the worker pool size to `1` when `CORITY_SAAS` is detected and uses a `sync.Mutex` inside the `CorityAdapter` to guarantee strictly sequential imports.
+
 ## [v0.8.0] - 2026-06-30
 
 ### Changed
