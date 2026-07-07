@@ -44,6 +44,7 @@ export MITM_DB_PORT="5432"
 export MITM_DB_USER="mitm_user"
 export MITM_DB_PASSWORD="secret"
 export MITM_DB_NAME="mitm"
+export MITM_DB_SSLMODE="true"
 
 # Provide the Master Key
 export MASTER_KEY="<base64_encryption_key>"

@@ -145,7 +145,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 				for k := range m {
 					keys = append(keys, k)
 				}
-				a.logAudit(fmt.Sprintf("DEBUG: EncryptedFields=%v | Payload Keys[0]=%v", config.EncryptedFields, keys))
+				// a.logAudit(fmt.Sprintf("DEBUG: EncryptedFields=%v | Payload Keys[0]=%v", config.EncryptedFields, keys))
 			}
 		}
 

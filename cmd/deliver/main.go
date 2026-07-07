@@ -96,7 +96,11 @@ func main() {
 		dbName = getEnv("MITM_DB_NAME", getEnv("DB_NAME", getEnv("PGDATABASE", "postgres")))
 	}
 
-	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", dbUser, dbPass, dbHost, dbPort, dbName)
+	sslMode := "disable"
+	if getEnv("MITM_DB_SSLMODE", "") == "true" {
+		sslMode = "require"
+	}
+	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbPort, dbName, sslMode)
 	pool, err := pgxpool.New(context.Background(), connString)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
