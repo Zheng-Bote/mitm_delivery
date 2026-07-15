@@ -3,6 +3,7 @@ package ipc
 import (
 	"encoding/json"
 	"net"
+	"fmt"
 )
 
 type StatusEvent struct {
