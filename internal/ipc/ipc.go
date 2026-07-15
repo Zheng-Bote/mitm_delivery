@@ -18,6 +18,8 @@ type IPCClient struct {
 	SocketPath string
 	RunID      int
 	Component  string
+	Topic      string
+	SourceName string
 }
 
 func (c *IPCClient) SendEvent(status, message string, progress int) {
@@ -29,6 +31,10 @@ func (c *IPCClient) SendEvent(status, message string, progress int) {
 		return
 	}
 	defer conn.Close()
+
+	if c.Topic != "" && c.SourceName != "" {
+		message = fmt.Sprintf("%s: %s: %s", c.Topic, c.SourceName, message)
+	}
 
 	event := StatusEvent{
 		RunID:     c.RunID,
@@ -51,6 +57,10 @@ func (c *IPCClient) SendAudit(message string) {
 		return
 	}
 	defer conn.Close()
+
+	if c.Topic != "" && c.SourceName != "" {
+		message = fmt.Sprintf("%s: %s: %s", c.Topic, c.SourceName, message)
+	}
 
 	event := StatusEvent{
 		RunID:     c.RunID,

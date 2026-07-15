@@ -22,7 +22,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "1.0.0"
+	version        = "0.11.0"
 )
 
 type JobArgs struct {
@@ -30,6 +30,7 @@ type JobArgs struct {
 	Workers    int    `json:"workers"`
 	BatchSize  int    `json:"batch_size"`
 	MaxRetries int    `json:"max_retries"`
+	SourceName string `json:"source_name"`
 }
 
 func getEnv(key, fallback string) string {
@@ -58,6 +59,9 @@ func main() {
 	}
 	if jobArgs.MaxRetries <= 0 {
 		jobArgs.MaxRetries = 5
+	}
+	if jobArgs.SourceName == "" {
+		jobArgs.SourceName = "DELIVERY"
 	}
 
 	// 2. Database Connection Setup
@@ -125,6 +129,8 @@ func main() {
 			SocketPath: socketPath,
 			RunID:      runID,
 			Component:  "mitm_delivery",
+			Topic:      jobArgs.Topic,
+			SourceName: jobArgs.SourceName,
 		}
 		ipcClient.SendEvent("started", fmt.Sprintf("%s (%s) started", appName, version), 0)
 		ipcClient.SendAudit(fmt.Sprintf("%s (%s) started", appName, version))

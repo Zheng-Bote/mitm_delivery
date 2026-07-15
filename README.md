@@ -54,7 +54,8 @@ ARGS_JSON='{
   "topic": "Employee",
   "workers": 5,
   "batch_size": 200,
-  "max_retries": 5
+  "max_retries": 5,
+  "source_name": "DELIVERY"
 }'
 
 ./bin/mitm-deliver "$ARGS_JSON"

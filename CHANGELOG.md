@@ -5,6 +5,12 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.11.0] - 2026-07-15
+
+### Added
+- **IPC Logging Enhancements**: Added `Topic` and `SourceName` fields to `IPCClient` to consistently prefix all IPC messages with `<Topic>: <SourceName>: `.
+- **Job Arguments**: Added `source_name` to `JobArgs` to pass the system's identity from the Scheduler to the Delivery Layer.
+
 ## [v0.10.0] - 2026-07-07
 
 ### Added
