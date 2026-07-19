@@ -312,6 +312,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 			bodyStr := string(bodyBytes)
 			var stats []string
 
+			// TODO: how to sharpen / make more reliable this regex?
 			patterns := []string{
 				`Records Added\s*:\s*\d+`,
 				`Records Updated\s*:\s*\d+`,

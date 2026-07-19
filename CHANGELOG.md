@@ -5,25 +5,35 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.12.0] - 2026-07-19
+
+### Changed
+
+- **Cority Payload Parsing**: Refined the Cority adapter to utilize a more robust and specific regex pattern for parsing the import response, improving reliability in extracting statistics.
+
 ## [v0.11.0] - 2026-07-15
 
 ### Added
+
 - **IPC Logging Enhancements**: Added `Topic` and `SourceName` fields to `IPCClient` to consistently prefix all IPC messages with `<Topic>: <SourceName>: `.
 - **Job Arguments**: Added `source_name` to `JobArgs` to pass the system's identity from the Scheduler to the Delivery Layer.
 
 ## [v0.10.0] - 2026-07-07
 
 ### Added
+
 - **SSL Support**: Added support for the `MITM_DB_SSLMODE` environment variable. The delivery engine now respects this setting and applies it to the MitM PostgreSQL connection string.
 
 ## [v0.9.0] - 2026-07-03
 
 ### Fixed
+
 - **Cority SaaS Concurrency Limits**: Resolved an error from the Cority SaaS provider (`only one import can be run at a time`). The engine now forces the worker pool size to `1` when `CORITY_SAAS` is detected and uses a `sync.Mutex` inside the `CorityAdapter` to guarantee strictly sequential imports.
 
 ## [v0.8.0] - 2026-06-30
 
 ### Changed
+
 - **Config Restructuring**: Updated database connection setup to read and parse the JSON configuration (`MITM_DB_CONFIG_JSON`) provided by the scheduler, matching the nested `"db"` object format.
 - **Database Connection**: The delivery layer now prioritizes the JSON configuration over the direct environment variables (`MITM_DB_HOST`, `DB_HOST`, etc.). Direct variables are kept strictly as a fallback.
 - **Audit Logging**: Added IPC audit logging during startup to actively record whether the database configuration was loaded from `JSON Config (MITM_DB_CONFIG_JSON)` or `Environment Variables`.
@@ -31,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.7.0] - 2026-06-24
 
 ### Added
+
 - **Envelope Encryption Decryption Support**: Fully implemented payload decryption using Envelope Encryption (KEK and DEK) directly within the Delivery Engine.
 - **Nested Ciphertext Structure Support**: Resolved a serialization bug where the Transformation Layer passed encrypted fields as JSON Objects (`{"ciphertext": "...", "nonce": "..."}`). The Delivery Layer now correctly intercepts, decrypts, and unmarshals these objects back to primitive JSON types.
 - **Improved Field Lookup & Case Insensitivity**: Improved SQL lookup for `EncryptedFields` to navigate a 3-way JOIN across `mapping_target_field`, `mapping_rule`, and `mapping_source` using a case-insensitive lookup to guarantee exact matches between source/target topics.
@@ -40,17 +51,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.6.0] - 2026-06-21
 
 ### Added
+
 - **Mock Configuration Fallback**: Added a development fallback to supply a mock authentication JSON payload if the decryption of `delivery_targets` using the active `MASTER_KEY` fails. This ensures End-to-End (E2E) testing can complete successfully when testing locally with dynamic keys.
 - **E2E Validation**: Successfully passed local mock server delivery execution tests within the overarching pipeline orchestration.
 
 ## [v0.5.0] - 2026-06-15
+
 ### Added
+
 - **Cority SaaS Audit Logging**: The Cority SaaS adapter now captures the complete raw response from the provider and logs it directly into the `job_audit_log` via IPC.
 - **Centralized App Info**: Added `appName` and `version` globally. The component now broadcasts its name and version via IPC when starting.
 
 ## [v0.4.0] - 2026-06-10
 
 ### Added
+
 - **IPC Client**: Added IPC logging to report progress, success, and errors via Unix domain sockets directly to the scheduler.
 - **Audit Logging**: Successful and failed delivery attempts are now sent to `job_audit_logs` including error codes.
 - **Cority Payload Null Filter**: The Cority adapter now recursively filters `null` values and replaces them with empty strings `""` before delivery.
@@ -59,14 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-06-06
 
 ### Changed
+
 - Changed database connection parameter parsing to read primarily from `MITM_DB_*` environment variables (e.g. `MITM_DB_HOST`, `MITM_DB_PASSWORD`) to be compatible with the updated central scheduler configuration structure.
 
 ## [0.1.0] - 2026-06-06
 
 ### Added
+
 - **Core Architecture:** Defined `DeliverySender` Strategy interface to dynamically inject target-specific HTTP logic (SaaS vs. APIGEE).
 - **Concurrency Support:** Robust Database Worker-Pool pattern using PostgreSQL `FOR UPDATE SKIP LOCKED` inside `PackageRepo`.
-- **Idempotency & Retry Engine:** 
+- **Idempotency & Retry Engine:**
   - Generates and transmits `Idempotency-Key` headers for safe repetition.
   - Implemented dynamic Exponential Backoff calculation for transient network/HTTP errors (e.g., `429 Too Many Requests`).
 - **Dead Letter Queue (DLQ):** Hard failing data packages (e.g., `HTTP 400`) and max-retry-exhausted packages are securely shifted into `dead_letter_queue` via `DLQRepo`.
