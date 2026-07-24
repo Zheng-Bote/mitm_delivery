@@ -5,6 +5,17 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.13.0] - 2026-07-24
+
+### Added
+
+- **Singleton Pattern**: Introduced a PostgreSQL Advisory Lock (`pg_try_advisory_lock`) in `cmd/deliver/main.go` to ensure `mitm_delivery` strictly runs as a singleton process per topic, preventing concurrent execution conflicts.
+
+### Changed
+
+- **Packaging Loop**: Improved the packaging logic to continuously loop and process all pending fragments from `target_fragments` into packages instead of processing just a single batch per run.
+- **Cority HTTP Timeout**: Increased the HTTP client timeout in `cority_adapter.go` from 30 seconds to 300 seconds to safely accommodate large payload sizes (e.g., thousands of records) during Cority REST API ingestions.
+
 ## [v0.12.0] - 2026-07-19
 
 ### Changed

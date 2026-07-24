@@ -24,15 +24,7 @@ type CorityAuthConfig struct {
 	AuthRefreshPath string `json:"auth_refresh_path"`
 	AuthTokenPath   string `json:"auth_token_path"`
 	ImportPath      string `json:"import_path"`
-	UploadOptions   struct {
-		UpdateExistingRecords       bool   `json:"updateExistingRecords"`
-		InsertBaseTables            bool   `json:"insertBaseTables"`
-		ForceLookupTableUpdate      bool   `json:"forceLookupTableUpdate"`
-		DisableSegUpdate            bool   `json:"disableSegUpdate"`
-		AutoCreatePortalUser        bool   `json:"autoCreatePortalUser"`
-		MergeRecordsWithMatchingSsn bool   `json:"mergeRecordsWithMatchingSsn"`
-		DateFormat                  string `json:"dateFormat"`
-	} `json:"upload_options"`
+	UploadOptions   map[string]interface{} `json:"upload_options"`
 }
 
 type CorityAdapter struct {
@@ -43,7 +35,7 @@ type CorityAdapter struct {
 
 func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter {
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: 300 * time.Second}
 	}
 	return &CorityAdapter{client: client, logAudit: logAudit}
 }
@@ -312,19 +304,22 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 			bodyStr := string(bodyBytes)
 			var stats []string
 
-			// TODO: how to sharpen / make more reliable this regex?
-			patterns := []string{
-				`Records Added\s*:\s*\d+`,
-				`Records Updated\s*:\s*\d+`,
-				`Records Skipped\s*:\s*\d+`,
-				`Errors\s*:\s*\d+`,
+			// More reliable regex to handle JSON quotes, camelCase variations, and case-insensitivity
+			patterns := []struct {
+				label string
+				re    *regexp.Regexp
+			}{
+				{"Records Total", regexp.MustCompile(`(?i)"?(?:Records Total|recordsTotal|records_total)"?\s*:\s*"?(\d+)"?`)},
+				{"Records Added", regexp.MustCompile(`(?i)"?(?:Records Added|recordsAdded|records_added)"?\s*:\s*"?(\d+)"?`)},
+				{"Records Updated", regexp.MustCompile(`(?i)"?(?:Records Updated|recordsUpdated|records_updated)"?\s*:\s*"?(\d+)"?`)},
+				{"Records Skipped", regexp.MustCompile(`(?i)"?(?:Records Skipped|recordsSkipped|records_skipped)"?\s*:\s*"?(\d+)"?`)},
+				{"Records Rejected", regexp.MustCompile(`(?i)"?(?:Records Rejected|recordsRejected|records_rejected)"?\s*:\s*"?(\d+)"?`)},
+				{"Errors", regexp.MustCompile(`(?i)"?Errors"?\s*:\s*"?(\d+)"?`)},
 			}
 
 			for _, p := range patterns {
-				if match := regexp.MustCompile(p).FindString(bodyStr); match != "" {
-					// Format nicely by normalizing spaces around the colon
-					match = regexp.MustCompile(`\s+:\s+`).ReplaceAllString(match, ": ")
-					stats = append(stats, match)
+				if matches := p.re.FindStringSubmatch(bodyStr); len(matches) > 1 {
+					stats = append(stats, fmt.Sprintf("%s: %s", p.label, matches[1]))
 				}
 			}
 

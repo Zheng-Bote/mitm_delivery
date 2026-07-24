@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"log"
 	"os"
 	"os/signal"
@@ -22,7 +23,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.11.0"
+	version        = "0.13.0"
 )
 
 type JobArgs struct {
@@ -111,6 +112,27 @@ func main() {
 	}
 	defer pool.Close()
 
+	// 2b. Singleton Lock via Postgres Advisory Lock
+	lockConn, err := pool.Acquire(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to acquire connection for advisory lock: %v", err)
+	}
+	defer lockConn.Release()
+
+	// Hash topic to 32-bit integer for lock ID
+	importHash := crc32.ChecksumIEEE([]byte("delivery_" + jobArgs.Topic))
+	lockID := int32(importHash)
+	
+	var locked bool
+	err = lockConn.QueryRow(context.Background(), "SELECT pg_try_advisory_lock($1)", lockID).Scan(&locked)
+	if err != nil {
+		log.Fatalf("Failed to execute pg_try_advisory_lock: %v", err)
+	}
+	if !locked {
+		log.Printf("Another delivery instance for topic '%s' is already running (Advisory Lock %d). Exiting gracefully.", jobArgs.Topic, lockID)
+		os.Exit(0)
+	}
+
 	// 3. Initialize Repositories and Engine
 	pkgRepo := db.NewPackageRepo(pool)
 	dlqRepo := db.NewDLQRepo(pool)
@@ -198,10 +220,15 @@ func main() {
 	totalProcessed := 0
 
 	// 6. Packager: Create delivery packages from target_fragments
-	packagedCount, err := pkgRepo.PackageTargetFragments(ctx, jobArgs.Topic, jobArgs.BatchSize*10)
-	if err != nil {
-		log.Printf("Error packaging target fragments: %v", err)
-	} else if packagedCount > 0 {
+	for {
+		packagedCount, err := pkgRepo.PackageTargetFragments(ctx, jobArgs.Topic, jobArgs.BatchSize*10)
+		if err != nil {
+			log.Printf("Error packaging target fragments: %v", err)
+			break
+		}
+		if packagedCount == 0 {
+			break
+		}
 		log.Printf("Packaged %d target fragments into new delivery packages.", packagedCount)
 	}
 
@@ -239,8 +266,8 @@ dispatcherLoop:
 	wg.Wait()
 	log.Printf("Delivery Batch Job finished successfully. Processed %d records.", totalProcessed)
 	if ipcClient != nil {
+		ipcClient.SendAudit(fmt.Sprintf("Successfully delivered %d Delivery records for topic %s", totalProcessed, jobArgs.Topic))
 		ipcClient.SendAudit(fmt.Sprintf("%s (%s) finished", appName, version))
-		ipcClient.SendEvent("success", fmt.Sprintf("Delivery Batch Job finished successfully. Processed %d records.", totalProcessed), 100)
 	}
 }
 

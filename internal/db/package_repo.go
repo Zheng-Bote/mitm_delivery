@@ -54,7 +54,7 @@ func (r *PackageRepo) PackageTargetFragments(ctx context.Context, topic string, 
 	}
 
 	var fragmentIDs []string
-	var payloads []map[string]interface{}
+	var payloads []interface{}
 
 	for rows.Next() {
 		var id string
@@ -65,12 +65,17 @@ func (r *PackageRepo) PackageTargetFragments(ctx context.Context, topic string, 
 		}
 		fragmentIDs = append(fragmentIDs, id)
 		
-		var payloadMap map[string]interface{}
-		if err := json.Unmarshal(p, &payloadMap); err != nil {
+		var parsed interface{}
+		if err := json.Unmarshal(p, &parsed); err != nil {
 			// Skip malformed JSON
 			continue
 		}
-		payloads = append(payloads, payloadMap)
+
+		if slice, isSlice := parsed.([]interface{}); isSlice {
+			payloads = append(payloads, slice...)
+		} else {
+			payloads = append(payloads, parsed)
+		}
 	}
 	rows.Close()
 
