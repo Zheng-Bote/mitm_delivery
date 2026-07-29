@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,18 +20,21 @@ import (
 )
 
 type CorityAuthConfig struct {
-	LoginUser       string `json:"login_user"`
-	LoginPass       string `json:"login_pass"`
-	AuthRefreshPath string `json:"auth_refresh_path"`
-	AuthTokenPath   string `json:"auth_token_path"`
-	ImportPath      string `json:"import_path"`
+	LoginUser       string                 `json:"login_user"`
+	LoginPass       string                 `json:"login_pass"`
+	AuthRefreshPath string                 `json:"auth_refresh_path"`
+	AuthTokenPath   string                 `json:"auth_token_path"`
+	ImportPath      string                 `json:"import_path"`
 	UploadOptions   map[string]interface{} `json:"upload_options"`
+	Slowdown        string                 `json:"slowdown"`
+	Timeout         string                 `json:"timeout"`
 }
 
 type CorityAdapter struct {
-	client   *http.Client
-	logAudit func(string)
-	mu       sync.Mutex
+	client     *http.Client
+	logAudit   func(string)
+	mu         sync.Mutex
+	lastUpload time.Time
 }
 
 func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter {
@@ -52,6 +56,25 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 		}
 	}
 
+	activeClient := a.client
+	if cfg.Timeout != "" {
+		if t, err := strconv.Atoi(cfg.Timeout); err == nil && t > 0 {
+			clientCopy := *a.client
+			clientCopy.Timeout = time.Duration(t) * time.Second
+			activeClient = &clientCopy
+		}
+	}
+
+	if cfg.Slowdown != "" && cfg.Slowdown != "0" {
+		if sec, err := strconv.Atoi(cfg.Slowdown); err == nil && sec > 0 {
+			elapsed := time.Since(a.lastUpload)
+			if delay := time.Duration(sec)*time.Second - elapsed; delay > 0 {
+				time.Sleep(delay)
+			}
+		}
+	}
+	defer func() { a.lastUpload = time.Now() }()
+
 	baseURL := strings.TrimSuffix(config.EndpointURL, "/")
 
 	// 1. Get Refresh Token
@@ -60,7 +83,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, refreshReqURL, strings.NewReader(refreshBody))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := a.client.Do(req)
+	resp, err := activeClient.Do(req)
 	if err != nil {
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed refresh request: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}
@@ -92,7 +115,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenReqURL, nil)
 	req2.Header.Set("Authorization", "Bearer "+refreshToken)
 
-	resp2, err := a.client.Do(req2)
+	resp2, err := activeClient.Do(req2)
 	if err != nil {
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed token request: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}
@@ -287,7 +310,7 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	req3.Header.Set("Authorization", "Bearer "+accessToken)
 	req3.Header.Set("Idempotency-Key", idempotencyKey)
 
-	resp3, err := a.client.Do(req3)
+	resp3, err := activeClient.Do(req3)
 	if err != nil {
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("network error during upload: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}

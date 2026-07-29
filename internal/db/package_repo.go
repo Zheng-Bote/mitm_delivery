@@ -64,7 +64,7 @@ func (r *PackageRepo) PackageTargetFragments(ctx context.Context, topic string, 
 			return 0, fmt.Errorf("failed to scan fragment: %w", err)
 		}
 		fragmentIDs = append(fragmentIDs, id)
-		
+
 		var parsed interface{}
 		if err := json.Unmarshal(p, &parsed); err != nil {
 			// Skip malformed JSON

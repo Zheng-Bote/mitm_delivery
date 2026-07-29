@@ -76,6 +76,8 @@ When configuring the Target via the Admin Frontend, the `Config Payload` JSON di
   "auth_refresh_path": "/api/refreshtoken",
   "auth_token_path": "/api/token/",
   "import_path": "/api/employeeimport",
+  "slowdown": "5",
+  "timeout": "300",
   "upload_options": {
     "import_mode": "upsert",
     "batch_size": 500,
@@ -90,7 +92,11 @@ When configuring the Target via the Admin Frontend, the `Config Payload` JSON di
 }
 ```
 
-**Note:** The adapter uses this configuration to assemble the final payload for the target API. Specifically, the data is uploaded in the following format:
+**Note:** 
+- The `slowdown` parameter is optional (in seconds). If set and > 0, the adapter will wait for the specified time interval between package uploads.
+- The `timeout` parameter is optional (in seconds). If set and > 0, it overrides the default HTTP timeout (300s) for each of the three Cority API requests.
+
+The adapter uses this configuration to assemble the final payload for the target API. Specifically, the data is uploaded in the following format:
 
 ```json
 {

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"mitm_delivery/internal/db"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {

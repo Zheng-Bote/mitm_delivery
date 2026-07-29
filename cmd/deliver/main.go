@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -42,6 +43,8 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
+	version = strings.Split(version, "-")[0]
+
 	if len(os.Args) < 2 {
 		log.Fatalf("Usage: %s <job_args_json>", os.Args[0])
 	}
@@ -122,7 +125,7 @@ func main() {
 	// Hash topic to 32-bit integer for lock ID
 	importHash := crc32.ChecksumIEEE([]byte("delivery_" + jobArgs.Topic))
 	lockID := int32(importHash)
-	
+
 	var locked bool
 	err = lockConn.QueryRow(context.Background(), "SELECT pg_try_advisory_lock($1)", lockID).Scan(&locked)
 	if err != nil {

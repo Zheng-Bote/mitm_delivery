@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"mitm_delivery/internal/crypto"
 	"mitm_delivery/internal/delivery"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TargetRepo struct {
