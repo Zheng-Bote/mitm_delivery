@@ -269,7 +269,7 @@ dispatcherLoop:
 	wg.Wait()
 	log.Printf("Delivery Batch Job finished successfully. Processed %d records.", totalProcessed)
 	if ipcClient != nil {
-		ipcClient.SendAudit(fmt.Sprintf("Successfully delivered %d Delivery records for topic %s", totalProcessed, jobArgs.Topic))
+		ipcClient.SendAudit(fmt.Sprintf("Successfully delivered %d Delivery packages for topic %s", totalProcessed, jobArgs.Topic))
 		ipcClient.SendAudit(fmt.Sprintf("%s (%s) finished", appName, version))
 	}
 }
