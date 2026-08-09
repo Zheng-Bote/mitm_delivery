@@ -81,8 +81,8 @@ func TestRetryEngine_TransientError(t *testing.T) {
 	pkg := db.Package{ID: "pkg-2", RetryCount: 1} // 1 retry already
 
 	err := eng.ProcessPackage(context.Background(), pkg, sender, delivery.TargetConfig{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error due to transient failure, got nil")
 	}
 
 	if pkgRepo.failedID != "pkg-2" {
@@ -110,8 +110,8 @@ func TestRetryEngine_FatalError(t *testing.T) {
 	pkg := db.Package{ID: "pkg-3", Payload: []byte(`bad payload`)}
 
 	err := eng.ProcessPackage(context.Background(), pkg, sender, delivery.TargetConfig{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error due to fatal failure, got nil")
 	}
 
 	if dlqRepo.pkg.ID != "pkg-3" {
@@ -134,8 +134,8 @@ func TestRetryEngine_MaxRetriesExceeded(t *testing.T) {
 	pkg := db.Package{ID: "pkg-4", RetryCount: 3} // max is 3
 
 	err := eng.ProcessPackage(context.Background(), pkg, sender, delivery.TargetConfig{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error due to max retries exceeded, got nil")
 	}
 
 	if dlqRepo.pkg.ID != "pkg-4" {

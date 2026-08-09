@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -60,7 +61,10 @@ func (e *RetryEngine) ProcessPackage(ctx context.Context, pkg db.Package, sender
 
 	if !delErr.IsTransient || pkg.RetryCount >= e.maxRetries {
 		// Fatal error or max retries exceeded -> Move to DLQ
-		return e.dlqRepo.MoveToDLQ(ctx, pkg, delErr.ErrorCode, delErr.ErrorMessage)
+		if dbErr := e.dlqRepo.MoveToDLQ(ctx, pkg, delErr.ErrorCode, delErr.ErrorMessage); dbErr != nil {
+			return fmt.Errorf("failed to move to DLQ: %w", dbErr)
+		}
+		return fmt.Errorf("delivery failed permanently (moved to DLQ): %w", delErr)
 	}
 
 	// Transient error with remaining retries -> Exponential backoff
@@ -69,5 +73,8 @@ func (e *RetryEngine) ProcessPackage(ctx context.Context, pkg db.Package, sender
 	backoffSeconds := math.Pow(2, float64(pkg.RetryCount))
 	nextRetryAt := time.Now().Add(time.Duration(backoffSeconds) * time.Second)
 
-	return e.pkgRepo.UpdateStatusFailed(ctx, pkg.ID, delErr.ErrorMessage, nextRetryAt, pkg.RetryCount)
+	if dbErr := e.pkgRepo.UpdateStatusFailed(ctx, pkg.ID, delErr.ErrorMessage, nextRetryAt, pkg.RetryCount); dbErr != nil {
+		return fmt.Errorf("failed to schedule retry: %w", dbErr)
+	}
+	return fmt.Errorf("delivery failed transiently (scheduled for retry): %w", delErr)
 }

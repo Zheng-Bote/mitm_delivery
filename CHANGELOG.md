@@ -5,6 +5,12 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.14.1] - 2026-08-09
+
+### Fixed
+- **DLQ Package Referencing**: Added database migration `006_fix_dlq_fk.sql` to remove the `ON DELETE SET NULL` foreign key constraint from the `dead_letter_queue` table, ensuring `package_id` remains intact when the original package is deleted.
+- **Retry Engine Error Handling**: Fixed a bug in `ProcessPackage` where database operation successes (moving to DLQ or scheduling a retry) incorrectly returned `nil`, causing the main worker to swallow the original delivery error and log it as a successful delivery.
+
 ## [v0.14.0] - 2026-07-29
 
 ### Added
