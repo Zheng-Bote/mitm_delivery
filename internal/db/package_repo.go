@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -66,7 +67,9 @@ func (r *PackageRepo) PackageTargetFragments(ctx context.Context, topic string, 
 		fragmentIDs = append(fragmentIDs, id)
 
 		var parsed interface{}
-		if err := json.Unmarshal(p, &parsed); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(p))
+		decoder.UseNumber()
+		if err := decoder.Decode(&parsed); err != nil {
 			// Skip malformed JSON
 			continue
 		}

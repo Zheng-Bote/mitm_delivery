@@ -24,7 +24,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.13.0"
+	version        = "0.15.0"
 )
 
 type JobArgs struct {

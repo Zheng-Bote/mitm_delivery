@@ -5,6 +5,11 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.15.0] - 2026-08-15
+
+### Fixed
+- **Data Parsing**: Replaced `json.Unmarshal` with `json.Decoder.UseNumber()` in `PackageRepo` to prevent large integers (like IDs) inside the JSON package payloads from being implicitly cast to `float64` and converted to scientific notation during reading and unmarshaling.
+
 ## [v0.14.1] - 2026-08-09
 
 ### Fixed
