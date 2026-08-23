@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 	"time"
 
 	"mitm_delivery/internal/crypto"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type CorityAuthConfig struct {
@@ -35,14 +39,31 @@ type CorityAdapter struct {
 	logAudit   func(string)
 	mu         sync.Mutex
 	lastUpload time.Time
+	db         *pgxpool.Pool
 }
 
-func NewCorityAdapter(client *http.Client, logAudit func(string)) *CorityAdapter {
+func NewCorityAdapter(client *http.Client, logAudit func(string), db *pgxpool.Pool) *CorityAdapter {
 	if client == nil {
 		client = &http.Client{Timeout: 300 * time.Second}
 	}
-	return &CorityAdapter{client: client, logAudit: logAudit}
+	return &CorityAdapter{client: client, logAudit: logAudit, db: db}
 }
+
+func parseCorityDate(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	// Try RFC3339
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	// Try fallback
+	if t, err := time.Parse("2006-01-02T15:04:05", s); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
 
 func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempotencyKey string, payload []byte) error {
 	a.mu.Lock()
@@ -77,72 +98,142 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 
 	baseURL := strings.TrimSuffix(config.EndpointURL, "/")
 
-	// 1. Get Refresh Token
-	refreshReqURL := baseURL + cfg.AuthRefreshPath
-	refreshBody := fmt.Sprintf(`{"user":{"LoginName":"%s","Loginpassword":"%s"}}`, cfg.LoginUser, cfg.LoginPass)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, refreshReqURL, strings.NewReader(refreshBody))
-	req.Header.Set("Content-Type", "application/json")
+	connectionHash := fmt.Sprintf("%x", sha256.Sum256([]byte(baseURL+"|"+cfg.LoginUser)))
 
-	resp, err := activeClient.Do(req)
+	tx, err := a.db.Begin(ctx)
 	if err != nil {
-		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed refresh request: %v", err), ErrorCode: "NETWORK_ERROR"}
+		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed to begin tx: %v", err), ErrorCode: "DB_ERROR"}
 	}
-	defer resp.Body.Close()
+	defer tx.Rollback(ctx)
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("refresh token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
-	}
+	var accessToken, refreshToken string
+	var accessExpiry, refreshExpiry time.Time
 
-	var refreshResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&refreshResp); err != nil {
-		return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse refresh token response", ErrorCode: "AUTH_FAIL"}
-	}
-
-	var refreshToken string
-	if val, ok := refreshResp["Token"].(string); ok && val != "" {
-		refreshToken = val
-	} else if val, ok := refreshResp["token"].(string); ok && val != "" {
-		refreshToken = val
-	}
-
-	if refreshToken == "" {
-		return &DeliveryError{IsTransient: false, ErrorMessage: "refresh token not found in response", ErrorCode: "AUTH_FAIL"}
+	// FOR UPDATE ensures only one worker attempts to refresh at a time
+	err = tx.QueryRow(ctx, "SELECT access_token, access_expiry, refresh_token, refresh_expiry FROM adapter_tokens WHERE connection_hash = $1 FOR UPDATE", connectionHash).Scan(&accessToken, &accessExpiry, &refreshToken, &refreshExpiry)
+	
+	needsRefresh := false
+	if err == pgx.ErrNoRows {
+		needsRefresh = true
+	} else if err != nil {
+		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed to read token: %v", err), ErrorCode: "DB_ERROR"}
+	} else {
+		// Margin of 60 seconds
+		if time.Now().Add(60 * time.Second).After(accessExpiry) {
+			needsRefresh = true
+		}
 	}
 
-	// 2. Get Access Token
-	tokenReqURL := baseURL + cfg.AuthTokenPath
-	req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenReqURL, nil)
-	req2.Header.Set("Authorization", "Bearer "+refreshToken)
+	if needsRefresh {
+		if a.logAudit != nil {
+			a.logAudit(fmt.Sprintf("Token expired or missing. Authenticating with Cority API..."))
+		}
+		
+		// 1. Get Refresh Token
+		refreshReqURL := baseURL + cfg.AuthRefreshPath
+		refreshBody := fmt.Sprintf(`{"user":{"LoginName":"%s","Loginpassword":"%s"}}`, cfg.LoginUser, cfg.LoginPass)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, refreshReqURL, strings.NewReader(refreshBody))
+		req.Header.Set("Content-Type", "application/json")
 
-	resp2, err := activeClient.Do(req2)
-	if err != nil {
-		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed token request: %v", err), ErrorCode: "NETWORK_ERROR"}
-	}
-	defer resp2.Body.Close()
+		resp, err := activeClient.Do(req)
+		if err != nil {
+			return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed refresh request: %v", err), ErrorCode: "NETWORK_ERROR"}
+		}
+		defer resp.Body.Close()
 
-	if resp2.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp2.Body)
-		return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("access token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
-	}
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("refresh token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
+		}
 
-	var tokenResp map[string]interface{}
-	if err := json.NewDecoder(resp2.Body).Decode(&tokenResp); err != nil {
-		return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse access token response", ErrorCode: "AUTH_FAIL"}
-	}
+		var refreshResp map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&refreshResp); err != nil {
+			return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse refresh token response", ErrorCode: "AUTH_FAIL"}
+		}
 
-	var accessToken string
-	if val, ok := tokenResp["AccessToken"].(string); ok && val != "" {
-		accessToken = val
-	} else if val, ok := tokenResp["access_token"].(string); ok && val != "" {
-		accessToken = val
-	} else if val, ok := tokenResp["token"].(string); ok && val != "" {
-		accessToken = val
-	}
+		if val, ok := refreshResp["Token"].(string); ok && val != "" {
+			refreshToken = val
+		} else if val, ok := refreshResp["token"].(string); ok && val != "" {
+			refreshToken = val
+		}
 
-	if accessToken == "" {
-		return &DeliveryError{IsTransient: false, ErrorMessage: "access token not found in response", ErrorCode: "AUTH_FAIL"}
+		if refreshToken == "" {
+			return &DeliveryError{IsTransient: false, ErrorMessage: "refresh token not found in response", ErrorCode: "AUTH_FAIL"}
+		}
+		
+		if val, ok := refreshResp["ExpiryDateTime"].(string); ok && val != "" {
+			refreshExpiry = parseCorityDate(val)
+		} else if val, ok := refreshResp["expiry"].(string); ok && val != "" {
+			refreshExpiry = parseCorityDate(val)
+		}
+
+		// 2. Get Access Token
+		tokenReqURL := baseURL + cfg.AuthTokenPath
+		req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenReqURL, nil)
+		req2.Header.Set("Authorization", "Bearer "+refreshToken)
+
+		resp2, err := activeClient.Do(req2)
+		if err != nil {
+			return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed token request: %v", err), ErrorCode: "NETWORK_ERROR"}
+		}
+		defer resp2.Body.Close()
+
+		if resp2.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp2.Body)
+			return &DeliveryError{IsTransient: false, ErrorMessage: fmt.Sprintf("access token failed: %s", string(bodyBytes)), ErrorCode: "AUTH_FAIL"}
+		}
+
+		var tokenResp map[string]interface{}
+		if err := json.NewDecoder(resp2.Body).Decode(&tokenResp); err != nil {
+			return &DeliveryError{IsTransient: false, ErrorMessage: "failed to parse access token response", ErrorCode: "AUTH_FAIL"}
+		}
+
+		if val, ok := tokenResp["AccessToken"].(string); ok && val != "" {
+			accessToken = val
+		} else if val, ok := tokenResp["access_token"].(string); ok && val != "" {
+			accessToken = val
+		} else if val, ok := tokenResp["token"].(string); ok && val != "" {
+			accessToken = val
+		}
+
+		if accessToken == "" {
+			return &DeliveryError{IsTransient: false, ErrorMessage: "access token not found in response", ErrorCode: "AUTH_FAIL"}
+		}
+		
+		if val, ok := tokenResp["AccessTokenExpiryDateTime"].(string); ok && val != "" {
+			accessExpiry = parseCorityDate(val)
+		} else if val, ok := tokenResp["ExpiryDateTime"].(string); ok && val != "" {
+			accessExpiry = parseCorityDate(val)
+		} else if val, ok := tokenResp["access_expiry"].(string); ok && val != "" {
+			accessExpiry = parseCorityDate(val)
+		}
+		
+		// 3. Save to DB
+		// Use a minimal fallback expiry if not provided by API
+		if accessExpiry.IsZero() {
+			accessExpiry = time.Now().Add(59 * time.Minute)
+		}
+		if refreshExpiry.IsZero() {
+			refreshExpiry = time.Now().Add(24 * time.Hour)
+		}
+
+		_, err = tx.Exec(ctx, `
+			INSERT INTO adapter_tokens (connection_hash, access_token, access_expiry, refresh_token, refresh_expiry, updated_at) 
+			VALUES ($1, $2, $3, $4, $5, NOW())
+			ON CONFLICT (connection_hash) 
+			DO UPDATE SET access_token = EXCLUDED.access_token, access_expiry = EXCLUDED.access_expiry, refresh_token = EXCLUDED.refresh_token, refresh_expiry = EXCLUDED.refresh_expiry, updated_at = NOW()
+		`, connectionHash, accessToken, accessExpiry, refreshToken, refreshExpiry)
+		if err != nil {
+			return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("failed to save token: %v", err), ErrorCode: "DB_ERROR"}
+		}
+		
+		if a.logAudit != nil {
+			a.logAudit(fmt.Sprintf("Successfully retrieved and cached new Cority tokens"))
+		}
 	}
+	
+	// Release the lock
+	tx.Commit(ctx)
 
 	// 3. Send Payload Data
 	var rawData []interface{}

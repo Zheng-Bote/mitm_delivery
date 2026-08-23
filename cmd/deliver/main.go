@@ -24,7 +24,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.15.0"
+	version        = "0.16.0"
 )
 
 type JobArgs struct {
@@ -182,7 +182,7 @@ func main() {
 	case "SAAS":
 		sender = delivery.NewSaaSAdapter(nil)
 	case "CORITY_SAAS":
-		sender = delivery.NewCorityAdapter(nil, logAudit)
+		sender = delivery.NewCorityAdapter(nil, logAudit, pool)
 		if jobArgs.Workers > 1 {
 			log.Printf("Forcing workers to 1 for CORITY_SAAS to prevent concurrent import errors.")
 			jobArgs.Workers = 1
