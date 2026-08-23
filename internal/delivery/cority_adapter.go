@@ -86,14 +86,25 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 		}
 	}
 
+	var slowdownMsg string
 	if cfg.Slowdown != "" && cfg.Slowdown != "0" {
 		if sec, err := strconv.Atoi(cfg.Slowdown); err == nil && sec > 0 {
+			slowdownMsg = fmt.Sprintf("Active (%d seconds)", sec)
 			elapsed := time.Since(a.lastUpload)
 			if delay := time.Duration(sec)*time.Second - elapsed; delay > 0 {
 				time.Sleep(delay)
 			}
+		} else {
+			slowdownMsg = "Inactive (invalid config)"
 		}
+	} else {
+		slowdownMsg = "Inactive"
 	}
+
+	if a.logAudit != nil {
+		a.logAudit(fmt.Sprintf("Upload Slowdown: %s", slowdownMsg))
+	}
+	
 	defer func() { a.lastUpload = time.Now() }()
 
 	baseURL := strings.TrimSuffix(config.EndpointURL, "/")
@@ -401,8 +412,41 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 	req3.Header.Set("Authorization", "Bearer "+accessToken)
 	req3.Header.Set("Idempotency-Key", idempotencyKey)
 
+	configuredTimeout := 300
+	if cfg.Timeout != "" {
+		if t, err := strconv.Atoi(cfg.Timeout); err == nil && t > 0 {
+			configuredTimeout = t
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		timer300 := time.NewTimer(300 * time.Second)
+		defer timer300.Stop()
+		select {
+		case <-timer300.C:
+			if a.logAudit != nil {
+				a.logAudit(fmt.Sprintf("Upload Warning: Delivery is taking longer than 300 seconds. Configured timeout is %d seconds.", configuredTimeout))
+			}
+		case <-done:
+		}
+	}()
+
+	startTime := time.Now()
 	resp3, err := activeClient.Do(req3)
+	close(done)
+	elapsed := time.Since(startTime)
+
 	if err != nil {
+		if elapsed >= time.Duration(configuredTimeout)*time.Second - 2*time.Second {
+			if a.logAudit != nil {
+				a.logAudit(fmt.Sprintf("Upload Error: Configured timeout of %d seconds reached. Request failed: %v", configuredTimeout, err))
+			}
+		} else {
+			if a.logAudit != nil {
+				a.logAudit(fmt.Sprintf("Upload Error: Network failure after %v: %v", elapsed, err))
+			}
+		}
 		return &DeliveryError{IsTransient: true, ErrorMessage: fmt.Sprintf("network error during upload: %v", err), ErrorCode: "NETWORK_ERROR"}
 	}
 	defer resp3.Body.Close()
