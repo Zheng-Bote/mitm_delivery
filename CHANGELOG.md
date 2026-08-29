@@ -5,36 +5,54 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.16.0] - 2026-08-23
+## [v0.18.0] - 2026-08-29
+
+### Changed/Added
+
+- Configured `pgxpool` connection limits (`MaxConns=20`, `MaxConnIdleTime=5m`, `MaxConnLifetime=1h`).
+- Implemented graceful shutdown with context cancellation on `SIGINT`/`SIGTERM`.
+- Optimized performance with batched operations.
+- Added/updated DLQ and error tracking mechanisms.
+
+## [v0.17.0] - 2026-08-23
 
 ### Added
+
 - **Central Token Caching**: Implemented a central authentication token store (`adapter_tokens` table via `007_adapter_tokens.sql`) to share OAuth2 access tokens across multiple Delivery/Cority_SaaS batch jobs utilizing the same endpoint and account.
 - **Concurrency Control for Auth**: Added a row-level lock (`SELECT ... FOR UPDATE`) in `CorityAdapter` to safely and concurrently handle token expirations, preventing multiple jobs from redundantly triggering API authentication calls at the exact same time.
 
+## [v0.16.0] - 2026-08-23
+
 ### Changed
+
 - **Cority Adapter Dependency**: `NewCorityAdapter` now accepts the `pgxpool.Pool` database connection to facilitate interactions with the central token store.
 
 ## [v0.15.0] - 2026-08-15
 
 ### Fixed
+
 - **Data Parsing**: Replaced `json.Unmarshal` with `json.Decoder.UseNumber()` in `PackageRepo` to prevent large integers (like IDs) inside the JSON package payloads from being implicitly cast to `float64` and converted to scientific notation during reading and unmarshaling.
 
 ## [v0.14.1] - 2026-08-09
 
 ### Fixed
+
 - **DLQ Package Referencing**: Added database migration `006_fix_dlq_fk.sql` to remove the `ON DELETE SET NULL` foreign key constraint from the `dead_letter_queue` table, ensuring `package_id` remains intact when the original package is deleted.
 - **Retry Engine Error Handling**: Fixed a bug in `ProcessPackage` where database operation successes (moving to DLQ or scheduling a retry) incorrectly returned `nil`, causing the main worker to swallow the original delivery error and log it as a successful delivery.
 
 ## [v0.14.0] - 2026-07-29
 
 ### Added
+
 - **Delivery Layer**: Implemented configurable `slowdown` and `timeout` parameters for the `CORITY_SAAS` delivery adapter.
 
 ### Changed
+
 - **Database**: Synced PostgreSQL database schema IST-Zustand across all layer `.sql` migrations (`setup.sql`, `transformation-layer`, `delivery-layer`, `scheduler`).
 - **Components Logging**: Refactored component version logging mechanism across all layers (Collectors, Transformation, Delivery, Scheduler) to consistently output a clean `Major.Minor.Patch` version format.
 
 ### Fixed
+
 - **Scheduler**: Resolved an HTTP 500 error on the `/admin/transformation/errors_bin` API endpoint by updating the query to correctly reference the `raw_ingestion_id` column and gracefully handle null values.
 
 ## [v0.13.0] - 2026-07-24

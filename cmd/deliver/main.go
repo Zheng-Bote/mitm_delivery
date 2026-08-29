@@ -24,7 +24,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.16.0"
+	version        = "0.18.0"
 )
 
 type JobArgs struct {
@@ -109,7 +109,16 @@ func main() {
 		sslMode = "require"
 	}
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbPort, dbName, sslMode)
-	pool, err := pgxpool.New(context.Background(), connString)
+	config_pool, err := pgxpool.ParseConfig(connString)
+	if err == nil {
+		config_pool.MaxConns = 20
+		config_pool.MaxConnIdleTime = 5 * time.Minute
+		config_pool.MaxConnLifetime = 1 * time.Hour
+	}
+	var pool *pgxpool.Pool
+	if err == nil {
+		pool, err = pgxpool.NewWithConfig(context.Background(), config_pool)
+	}
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}

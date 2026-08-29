@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"time"
 )
 
 type Config struct {
@@ -59,7 +61,16 @@ func setupDatabase(t *testing.T, pool *pgxpool.Pool) {
 func TestE2EDeliveryBatchJob(t *testing.T) {
 	cfg := loadConfig(t)
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-	pool, err := pgxpool.New(context.Background(), connStr)
+	config_pool, err := pgxpool.ParseConfig(connStr)
+	if err == nil {
+		config_pool.MaxConns = 20
+		config_pool.MaxConnIdleTime = 5 * time.Minute
+		config_pool.MaxConnLifetime = 1 * time.Hour
+	}
+	var pool *pgxpool.Pool
+	if err == nil {
+		pool, err = pgxpool.NewWithConfig(context.Background(), config_pool)
+	}
 	if err != nil {
 		t.Fatalf("failed to connect to db: %v", err)
 	}
