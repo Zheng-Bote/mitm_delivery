@@ -27,7 +27,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.19.1"
+	version        = "0.19.2"
 )
 
 type JobArgs struct {
@@ -100,7 +100,7 @@ func main() {
 				User     string `json:"user"`
 				Password string `json:"password"`
 				Database string `json:"database"`
-				SSLMode  string `json:"sslmode"`
+				SSLMode  bool   `json:"sslmode"`
 			} `json:"db"`
 		}
 		if err := json.Unmarshal([]byte(jsonConfig), &fullCfg); err != nil {
@@ -111,8 +111,10 @@ func main() {
 		dbUser = fullCfg.DB.User
 		dbPass = fullCfg.DB.Password
 		dbName = fullCfg.DB.Database
-		if fullCfg.DB.SSLMode != "" {
-			os.Setenv("MITM_DB_SSLMODE", fullCfg.DB.SSLMode)
+		if fullCfg.DB.SSLMode {
+			os.Setenv("MITM_DB_SSLMODE", "require")
+		} else {
+			os.Setenv("MITM_DB_SSLMODE", "disable")
 		}
 		configSource = "JSON Config (MITM_DB_CONFIG_JSON)"
 	} else {
