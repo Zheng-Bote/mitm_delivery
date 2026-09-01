@@ -27,7 +27,7 @@ import (
 var (
 	appName        = "Delivery Engine"
 	appDescription = "Delivers packaged data to target systems"
-	version        = "0.19.2"
+	version        = "0.19.3"
 )
 
 type JobArgs struct {
@@ -126,8 +126,15 @@ func main() {
 	}
 
 	sslMode := "disable"
-	if getEnv("MITM_DB_SSLMODE", "") == "true" {
-		sslMode = "require"
+	envSSLMode := os.Getenv("MITM_DB_SSLMODE")
+	if envSSLMode != "" {
+		if envSSLMode == "true" {
+			sslMode = "require"
+		} else if envSSLMode == "false" {
+			sslMode = "disable"
+		} else {
+			sslMode = envSSLMode
+		}
 	}
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbPort, dbName, sslMode)
 	config_pool, err := pgxpool.ParseConfig(connString)
