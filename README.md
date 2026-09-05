@@ -29,24 +29,18 @@ go build -o bin/mitm-deliver ./cmd/deliver/main.go
 
 The `mitm-deliver` module is executed as a short-lived batch job by the `mitm_scheduler`. It expects:
 
-1. **Environment Variables** for PostgreSQL connections and `MASTER_KEY`.
+1. **IPC Scheduler Connection** (Preferred) to dynamically fetch PostgreSQL credentials and the `MASTER_KEY`, or direct **Environment Variables** (Fallback).
 2. **A single JSON Argument (`os.Args[1]`)** specifying the Job constraints and the `Topic`.
 
 ### Example Execution
 
 ```bash
-# 1. Provide Database connection via JSON (Preferred)
+# 1. IPC Execution (Running under Scheduler - Preferred)
+export RUN_ID="123"
+export SCHEDULER_SOCKET_PATH="/tmp/scheduler.sock"
+
+# OR via Direct Environment Variables (Fallback for standalone execution)
 export MITM_DB_CONFIG_JSON='{"db":{"host":"192.168.7.31","port":5432,"user":"mitm_user","password":"...","database":"mitm"}}'
-
-# Or via Direct Environment Variables (Fallback)
-export MITM_DB_HOST="192.168.7.31"
-export MITM_DB_PORT="5432"
-export MITM_DB_USER="mitm_user"
-export MITM_DB_PASSWORD="secret"
-export MITM_DB_NAME="mitm"
-export MITM_DB_SSLMODE="true"
-
-# Provide the Master Key
 export MASTER_KEY="<base64_encryption_key>"
 
 # 2. Define the Job parameters
@@ -55,13 +49,14 @@ ARGS_JSON='{
   "workers": 5,
   "batch_size": 200,
   "max_retries": 5,
-  "source_name": "DELIVERY"
+  "source_name": "DELIVERY",
+  "blocking_jobs": ["mitm_deliver_Org"]
 }'
 
 ./bin/mitm-deliver "$ARGS_JSON"
 ```
 
-The Delivery job will automatically connect to the database, query the `delivery_targets` table for the target configuration matching the `Topic` ("Employee"), decrypt the `config_payload` using `MASTER_KEY`, and dynamically instantiate the correct adapter.
+The Delivery job will automatically connect to the database (fetching credentials via IPC if running under the scheduler), query the `delivery_targets` table for the target configuration matching the `Topic` ("Employee"), decrypt the `config_payload` using `MASTER_KEY`, and dynamically instantiate the correct adapter.
 
 ### Config Payload Examples (Database / Admin UI)
 
