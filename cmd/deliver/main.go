@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mitm_delivery/internal/db"
@@ -31,11 +32,12 @@ var (
 )
 
 type JobArgs struct {
-	Topic      string `json:"topic"`
-	Workers    int    `json:"workers"`
-	BatchSize  int    `json:"batch_size"`
-	MaxRetries int    `json:"max_retries"`
-	SourceName string `json:"source_name"`
+	Topic        string   `json:"topic"`
+	Workers      int      `json:"workers"`
+	BatchSize    int      `json:"batch_size"`
+	MaxRetries   int      `json:"max_retries"`
+	SourceName   string   `json:"source_name"`
+	BlockingJobs []string `json:"blocking_jobs"`
 }
 
 func getEnv(key, fallback string) string {
@@ -204,6 +206,29 @@ func main() {
 		log.Printf("AUDIT: %s", msg)
 		if ipcClient != nil {
 			ipcClient.SendAudit(msg)
+		}
+	}
+
+	// 3b. Check for Blocking Jobs
+	if len(jobArgs.BlockingJobs) > 0 {
+		var blockingJobName string
+		err := pool.QueryRow(context.Background(), `
+			SELECT sp.name 
+			FROM program_runs pr 
+			JOIN scheduled_programs sp ON pr.program_id = sp.id 
+			WHERE sp.name = ANY($1) 
+			  AND pr.finished_at IS NULL 
+			LIMIT 1`, jobArgs.BlockingJobs).Scan(&blockingJobName)
+
+		if err == nil {
+			msg := fmt.Sprintf("Exiting gracefully: blocking job '%s' is currently running.", blockingJobName)
+			logAudit(msg)
+			if ipcClient != nil {
+				ipcClient.SendEvent("exited", msg, 0)
+			}
+			os.Exit(0)
+		} else if err != pgx.ErrNoRows {
+			log.Printf("Warning: Failed to check blocking jobs: %v", err)
 		}
 	}
 
