@@ -350,7 +350,9 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 								// The decrypted data might be a JSON-marshaled string (e.g., `"537732"` with quotes).
 								// We try to unmarshal it back to a primitive. If it fails, fallback to raw string.
 								var parsedVal interface{}
-								if errUnmarshal := json.Unmarshal(decrypted, &parsedVal); errUnmarshal == nil {
+								dec := json.NewDecoder(bytes.NewReader(decrypted))
+								dec.UseNumber()
+								if errUnmarshal := dec.Decode(&parsedVal); errUnmarshal == nil {
 									m[targetKey] = parsedVal
 								} else {
 									m[targetKey] = string(decrypted)

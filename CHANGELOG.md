@@ -5,6 +5,12 @@ All notable changes to the `mitm_delivery` component will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.21.0] - 2026-09-07
+
+### Fixed
+
+- **Data Parsing (Cority Adapter)**: Fixed a bug where decrypted envelope payload fields (e.g., SSN) were unmarshaled using standard `json.Unmarshal`. This caused raw numeric strings to be implicitly cast to `float64` and subsequently converted into scientific notation (e.g., `e+12`) during SaaS API delivery. Replaced it with `json.Decoder.UseNumber()` to preserve exact numeric formatting.
+
 ## [v0.20.0] - 2026-09-05
 
 ### Added
