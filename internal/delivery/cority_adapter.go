@@ -352,7 +352,13 @@ func (a *CorityAdapter) Send(ctx context.Context, config TargetConfig, idempoten
 								var parsedVal interface{}
 								dec := json.NewDecoder(bytes.NewReader(decrypted))
 								dec.UseNumber()
-								if errUnmarshal := dec.Decode(&parsedVal); errUnmarshal == nil {
+								errUnmarshal := dec.Decode(&parsedVal)
+								if errUnmarshal == nil {
+									if _, errTrailing := dec.Token(); errTrailing != io.EOF {
+										errUnmarshal = fmt.Errorf("trailing data found")
+									}
+								}
+								if errUnmarshal == nil {
 									m[targetKey] = parsedVal
 								} else {
 									m[targetKey] = string(decrypted)
